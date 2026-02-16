@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, RefreshCw, Shield, AlertTriangle, XCircle } from 'lucide-react';
+import { Copy, Check, RefreshCw, Shield, AlertTriangle, XCircle, Download, Trash2, History, Settings } from 'lucide-react';
 
 function App() {
   const [password, setPassword] = useState('');
@@ -12,6 +12,33 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [multiPasswords, setMultiPasswords] = useState([]);
   const [generateCount, setGenerateCount] = useState(5);
+  
+  // 新機能：パスワード履歴
+  const [passwordHistory, setPasswordHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  
+  // 新機能：ブランディング設定
+  const [showBranding, setShowBranding] = useState(false);
+  const [companyName, setCompanyName] = useState('あなたの会社名');
+  const [primaryColor, setPrimaryColor] = useState('#4f46e5');
+
+  // ローカルストレージから履歴とブランディング設定を読み込み
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('passwordHistory');
+    if (savedHistory) {
+      setPasswordHistory(JSON.parse(savedHistory));
+    }
+    
+    const savedCompanyName = localStorage.getItem('companyName');
+    if (savedCompanyName) {
+      setCompanyName(savedCompanyName);
+    }
+    
+    const savedColor = localStorage.getItem('primaryColor');
+    if (savedColor) {
+      setPrimaryColor(savedColor);
+    }
+  }, []);
 
   const generatePassword = () => {
     const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -37,6 +64,87 @@ function App() {
 
     setPassword(newPassword);
     setCopied(false);
+    
+    // 履歴に追加
+    addToHistory(newPassword);
+  };
+
+  const addToHistory = (pwd) => {
+    const historyItem = {
+      password: pwd,
+      timestamp: new Date().toISOString(),
+      strength: checkStrength(pwd)
+    };
+    
+    const newHistory = [historyItem, ...passwordHistory].slice(0, 50); // 最大50件
+    setPasswordHistory(newHistory);
+    localStorage.setItem('passwordHistory', JSON.stringify(newHistory));
+  };
+
+  const clearHistory = () => {
+    if (confirm('履歴を全て削除しますか？')) {
+      setPasswordHistory([]);
+      localStorage.removeItem('passwordHistory');
+    }
+  };
+
+  const exportToCSV = () => {
+    if (passwordHistory.length === 0) {
+      alert('エクスポートする履歴がありません');
+      return;
+    }
+
+    const csvContent = [
+      ['パスワード', '生成日時', '強度', 'スコア'],
+      ...passwordHistory.map(item => [
+        item.password,
+        new Date(item.timestamp).toLocaleString('ja-JP'),
+        item.strength?.text || '',
+        `${item.strength?.score || 0}/${item.strength?.maxScore || 8}`
+      ])
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `passwords_${new Date().toISOString().split('T')[0]}.csv`);
+    link.click();
+  };
+
+  const exportMultiPasswordsToCSV = () => {
+    if (multiPasswords.length === 0) {
+      alert('エクスポートするパスワードがありません');
+      return;
+    }
+
+    const csvContent = [
+      ['番号', 'パスワード', '強度', 'スコア', '文字数'],
+      ...multiPasswords.map((pwd, idx) => {
+        const strength = checkStrength(pwd);
+        return [
+          idx + 1,
+          pwd,
+          strength?.text || '',
+          `${strength?.score || 0}/${strength?.maxScore || 8}`,
+          pwd.length
+        ];
+      })
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `batch_passwords_${new Date().toISOString().split('T')[0]}.csv`);
+    link.click();
+  };
+
+  const saveBrandingSettings = () => {
+    localStorage.setItem('companyName', companyName);
+    localStorage.setItem('primaryColor', primaryColor);
+    setShowBranding(false);
+    alert('設定を保存しました');
   };
 
   const generateMultiple = () => {
@@ -144,11 +252,137 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="flex items-center gap-3 mb-6">
-            <Shield className="w-8 h-8 text-indigo-600" />
-            <h1 className="text-3xl font-bold text-gray-800">パスワード生成＆強度チェックツール</h1>
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Shield className="w-8 h-8" style={{ color: primaryColor }} />
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800">パスワード生成＆強度チェックツール</h1>
+                <p className="text-sm text-gray-500">{companyName}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center gap-2"
+                title="履歴を表示"
+              >
+                <History className="w-5 h-5" />
+                履歴 ({passwordHistory.length})
+              </button>
+              <button
+                onClick={() => setShowBranding(!showBranding)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                title="設定"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
+          {/* ブランディング設定パネル */}
+          {showBranding && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">ブランディング設定</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    会社名・部署名
+                  </label>
+                  <input
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                    placeholder="例: 株式会社〇〇 情報システム部"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    テーマカラー
+                  </label>
+                  <div className="flex gap-3">
+                    <input
+                      type="color"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="w-20 h-10 rounded cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={saveBrandingSettings}
+                  className="px-6 py-2 text-white rounded-lg hover:opacity-90 transition-colors"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  設定を保存
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* パスワード履歴パネル */}
+          {showHistory && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-800">パスワード履歴</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={exportToCSV}
+                    className="px-4 py-2 text-white rounded-lg hover:opacity-90 transition-colors flex items-center gap-2"
+                    style={{ backgroundColor: primaryColor }}
+                    disabled={passwordHistory.length === 0}
+                  >
+                    <Download className="w-4 h-4" />
+                    CSV出力
+                  </button>
+                  <button
+                    onClick={clearHistory}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
+                    disabled={passwordHistory.length === 0}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    クリア
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-96 overflow-y-auto space-y-2">
+                {passwordHistory.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">履歴はまだありません</p>
+                ) : (
+                  passwordHistory.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded border border-gray-200">
+                      <span className="flex-1 font-mono text-sm">{item.password}</span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(item.timestamp).toLocaleString('ja-JP')}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded ${
+                        item.strength?.level === 'strong' ? 'bg-green-100 text-green-800' :
+                        item.strength?.level === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {item.strength?.text}
+                      </span>
+                      <button
+                        onClick={() => copyToClipboard(item.password)}
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm transition-colors"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* パスワード生成セクション */}
           <div className="bg-gray-50 rounded-lg p-6 mb-6">
             <div className="flex items-center gap-3 mb-3">
               <input
@@ -160,7 +394,8 @@ function App() {
               />
               <button
                 onClick={() => copyToClipboard(password)}
-                className="px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                className="px-4 py-3 text-white rounded-lg hover:opacity-90 transition-colors flex items-center gap-2"
+                style={{ backgroundColor: primaryColor }}
                 disabled={!password}
               >
                 {copied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
@@ -277,25 +512,38 @@ function App() {
               />
               <button
                 onClick={generateMultiple}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                className="px-6 py-2 text-white rounded-lg hover:opacity-90 transition-colors"
+                style={{ backgroundColor: primaryColor }}
               >
                 一括生成
               </button>
             </div>
 
             {multiPasswords.length > 0 && (
-              <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                {multiPasswords.map((pwd, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mb-2 p-2 bg-white rounded border border-gray-200">
-                    <span className="flex-1 font-mono text-sm">{pwd}</span>
-                    <button
-                      onClick={() => copyToClipboard(pwd)}
-                      className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm transition-colors"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <div>
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={exportMultiPasswordsToCSV}
+                    className="px-4 py-2 text-white rounded-lg hover:opacity-90 transition-colors flex items-center gap-2"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    <Download className="w-4 h-4" />
+                    一括生成分をCSV出力
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
+                  {multiPasswords.map((pwd, idx) => (
+                    <div key={idx} className="flex items-center gap-2 mb-2 p-2 bg-white rounded border border-gray-200">
+                      <span className="flex-1 font-mono text-sm">{pwd}</span>
+                      <button
+                        onClick={() => copyToClipboard(pwd)}
+                        className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded text-sm transition-colors"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
